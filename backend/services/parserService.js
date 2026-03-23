@@ -23,10 +23,7 @@ function parseMap(input) {
             const metadata = {};
             const difficulty = {};
             const hitObjects = [];
-
-
-
-
+            const timingPoints = [];
 
             for (const text of lines) {
 
@@ -70,6 +67,36 @@ function parseMap(input) {
                     }
 
                 }
+                //timingpoints
+                if (currentSection === "TimingPoints") {
+                    const timePoint = trimmed.split(',');
+                    if (timePoint.length >= 2) {
+                        let time = parseInt(timePoint[0]); //note
+                        let beatLength = parseFloat(timePoint[1]);//note
+                        let meter = parseInt(timePoint[2]);
+                        let sampleSet = parseInt(timePoint[3]);
+                        let sampleIndex = parseInt(timePoint[4]);
+                        let volume = parseInt(timePoint[5]);
+                        let uninherited = 1
+                        if (timePoint[6]) {
+                            uninherited = parseInt(timePoint[6]); //note
+                        }
+                        let effects = parseInt(timePoint[7]);
+
+                        const object = {
+                            time: time,
+                            beatLength: beatLength,
+                            meter: meter,
+                            sampleSet: sampleSet,
+                            sampleIndex: sampleIndex,
+                            volume: volume,
+                            uninherited: uninherited,
+                            effects: effects
+                        }
+
+                        timingPoints.push(object);
+                    }
+                }
 
                 //hitObhjcts
                 if (currentSection === "HitObjects") {
@@ -88,10 +115,7 @@ function parseMap(input) {
                         }
 
                         hitObjects.push(object);
-
                     }
-
-
                 }
 
             }
@@ -99,6 +123,7 @@ function parseMap(input) {
             const mapData = {
                 metadata: metadata,
                 difficulty: difficulty,
+                timingPoints: timingPoints,
                 hitObjects: hitObjects
             }
 
@@ -106,23 +131,10 @@ function parseMap(input) {
             resolve(mapData);
         })
 
-
-
     })
 
 
 }
 
-// async function getdata() {
-//     console.log('fetching data..');
-
-//     const result = await parseMap(input);
-
-//     console.log(result);
-
-//     return result;
-// }
-
-// getdata();
 
 module.exports = parseMap;
