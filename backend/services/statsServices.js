@@ -1,6 +1,6 @@
 const parseMap = require('./parserService.js');
 
-const map = "../../frontend/beatmaps/3sample.osu"; //change to content later
+const map = "../../frontend/beatmaps/sample.osu"; //change to content later
 
 
 async function getStats() {
@@ -11,7 +11,7 @@ async function getStats() {
     //total hitobjects
     const hitObjects = mapData.hitObjects;
     const totalNotes = hitObjects.length;
-    console.log("Total Objects = " + totalNotes);
+    // console.log("Total Objects = " + totalNotes);
 
     //length in mins
     if (mapData.hitObjects[0] == null) {
@@ -28,12 +28,66 @@ async function getStats() {
 
     const duration = mins + ":" + (seconds < 10 ? '0' : '') + seconds;
 
-    console.log("Time in minutes = " + duration);
+    // console.log("Time in minutes = " + duration);
+    // calculating object types
+    let circleCount = 0;
+    let sliderCount = 0;
+    let spinnerCount = 0;
 
+    for (const object of hitObjects) {
+        if ((object.type & 1) != 0) {
+            circleCount++;
+        } else if ((object.type & 2) != 0) {
+            sliderCount++;
+        } else if ((object.type & 8) != 0) {
+            spinnerCount++;
+        }
+    }
     //note density?
 
     const density = totalNotes / (ms / 1000);
-    console.log("Map Density (Notes per Second)= " + density.toFixed(2));
+
+    // SECTION DENSITY
+
+    const windowSize = 5000; // 5 seconds
+    const densityList = [];
+    let currentTime = start;
+
+    while (currentTime < end) {
+        const windowEnd = currentTime + windowSize;
+        let count = 0;
+        for (const object of hitObjects) {
+            if (object.time >= currentTime && object.time < windowEnd) {
+                count++;
+            }
+        }
+        const densityWindow = count / (windowSize / 1000);
+        densityList.push(densityWindow);
+        currentTime += windowSize;
+    }
+
+
+    // COMPUTE PEAK + AVERAGE
+
+    let peakDensity = 0;
+    let avgDensity = 0;
+
+    if (densityList.length > 0) {
+        peakDensity = densityList[0];
+        let totalDensity = 0;
+        for (const value of densityList) {
+            if (value > peakDensity) {
+                peakDensity = value;
+            }
+            totalDensity += value;
+        }
+        avgDensity = totalDensity / densityList.length;
+    }
+
+
+    // OPTIONAL ROUNDING
+    peakDensity = Number(peakDensity.toFixed(2));
+    avgDensity = Number(avgDensity.toFixed(2));
 
 
     //BPM fuck!! 
@@ -50,13 +104,39 @@ async function getStats() {
         }
     }
 
-    console.log("These are the BPM(s)= " + bpmList[0].toFixed(2));
+    let minBPM = 0;
+    let maxBPM = 0;
+    let avgBPM = 0;
+
+    if (bpmList.length === 0) {
+        minBPM = 0;
+        maxBPM = 0;
+        avgBPM = 0;
+    } else {
+        minBPM = bpmList[0];
+        maxBPM = bpmList[0];
+
+        let total = 0;
+
+        for (const bpm of bpmList) {
+            if (bpm < minBPM) {
+                minBPM = bpm;
+            }
+            if (bpm > maxBPM) {
+                maxBPM = bpm;
+            }
+            total += bpm;
+        }
+        avgBPM = total / bpmList.length;
+    }
+
+    // console.log("These are the BPM(s)= " + bpmList[0].toFixed(2));
 
     //  slider velocity
 
     const sliderSpeedList = [];
 
-    for (point of timingPoints) {
+    for (const point of timingPoints) {
         if (point.uninherited == 0 && point.beatLength < 0) {
             const sv = -100 / point.beatLength;
             sliderSpeedList.push(sv);
@@ -65,36 +145,10 @@ async function getStats() {
 
     // console.log(sliderSpeedList);
 
-    if (sliderSpeedList.length == 0) {
-        console.log("No sliders in map");
-        return;
-    } else {
-        let totalSv = 0;
-        let minSv = 1.0;
-        let maxSv = 1.0;
-        // average slider speed
-        for (const slider of sliderSpeedList) {
-            totalSv = totalSv + slider;
-        }
-        const avgSv = totalSv / sliderSpeedList.length;
-
-        //min slider
-        for (const slider of sliderSpeedList) {
-            if (slider < minSv) {
-                minSv = slider;
-            }
-        }
-        // max slider
-        for (const slider of sliderSpeedList) {
-            if (slider > maxSv) {
-                maxSv = slider;
-            }
-        }
-
-        console.log("Average Slider Speed = " + avgSv.toFixed(2));
-        console.log("Slowest Slider Speed = " + minSv.toFixed(2));
-        console.log("Fastest Slider Speed = " + maxSv.toFixed(2));
-    }
+    let totalSv = 0;
+    let minSv = 1.0;
+    let maxSv = 1.0;
+    let avgSv = 0;
 
     // incidents where sliders go fast
     // constant values
@@ -106,33 +160,114 @@ async function getStats() {
     let normalCount = 0;
     let fastCount = 0;
 
-    for (const slider of sliderSpeedList) {
-        if (slider <= slow) {
-            slowCount++;
-        } else if (slider >= fast) {
-            fastCount++;
-        } else {
-            normalCount++;
+    let slowPercent = 0;
+    let fastPercent = 0;
+    let normalPercent = 0;
+
+    if (sliderSpeedList.length === 0) {
+        console.log("No sliders in map");
+
+        minSv = 0;
+        maxSv = 0;
+        avgSv = 0;
+
+        slowCount = 0;
+        normalCount = 0;
+        fastCount = 0;
+
+        slowPercent = 0;
+        normalPercent = 0;
+        fastPercent = 0;
+
+    } else {
+
+        // average slider speed
+        for (const slider of sliderSpeedList) {
+            totalSv = totalSv + slider;
         }
+        avgSv = totalSv / sliderSpeedList.length;
+
+        //min & max slider (FIXED initialization)
+        minSv = sliderSpeedList[0];
+        maxSv = sliderSpeedList[0];
+
+        for (const slider of sliderSpeedList) {
+            if (slider < minSv) {
+                minSv = slider;
+            }
+            if (slider > maxSv) {
+                maxSv = slider;
+            }
+        }
+
+        // distribution
+        for (const slider of sliderSpeedList) {
+            if (slider <= slow) {
+                slowCount++;
+            } else if (slider >= fast) {
+                fastCount++;
+            } else {
+                normalCount++;
+            }
+        }
+
+        //percentages
+        slowPercent = (slowCount / sliderSpeedList.length) * 100;
+        fastPercent = (fastCount / sliderSpeedList.length) * 100;
+        normalPercent = (normalCount / sliderSpeedList.length) * 100;
     }
 
-    //percentages
-    const slowPercent = (slowCount / sliderSpeedList.length) * 100;
-    const fastPercent = (fastCount / sliderSpeedList.length) * 100;
-    const normalPercent = (normalCount / sliderSpeedList.length) * 100;
+
+    const statistics = {
+        totalNotes: totalNotes,
+        mapDuration: duration,
+        rawMapDuration: ms,
+        noteDensity: density,
+        bpmStats: {
+            min: minBPM,
+            max: maxBPM,
+            avg: avgBPM
+        },
+        objectCounts: {
+            circles: circleCount,
+            sliders: sliderCount,
+            spinners: spinnerCount,
+            total: totalNotes
+        },
+        sliderVelocity: {
+            minSv: minSv,
+            maxSv: maxSv,
+            avgSv: avgSv
+        },
+        sliderStats: {
+            slowCount: slowCount,
+            fastCount: fastCount,
+            normalCount: normalCount,
+
+            slowPercent: slowPercent,
+            fastPercent: fastPercent,
+            normalPercent: normalPercent
+        },
+        densityStats: {
+            peak: peakDensity,
+            average: avgDensity
+        }
+    };
+
+    return statistics;
+}
 
 
+//this function is for testing
+async function calculate() {
 
-    console.log("Slow instances = " + slowCount);
-    console.log("Percentage = " + slowPercent.toFixed(2) + "%");
-
-    console.log("Fast instances = " + fastCount);
-    console.log("Percentage = " + fastPercent.toFixed(2) + "%");
-
-    console.log("Normal instances = " + normalCount);
-    console.log("Percentage = " + normalPercent.toFixed(2) + "%");
-
+    const stats = await getStats();
+    console.log(stats);
 
 }
 
-getStats();
+
+calculate();
+
+
+module.exports = getStats;
